@@ -28,7 +28,7 @@ def main(remove_obsolete_folders):
     feature_list = []
     mean_feature_list = []
     representative_data_points = []
-    name_list = []
+    file_list = []
     obsolete_folders = []
 
     for folder in tqdm([folder for folder in os.listdir(DATA_FOLDER) if os.path.isdir(os.path.join(DATA_FOLDER, folder))]):
@@ -64,9 +64,9 @@ def main(remove_obsolete_folders):
         representative_data_points.append(closest_point.tolist())
         folder_list.append(folder)
         feature_list.append(batch_features.tolist())
-        name_list.append(tmp_file_names)
+        file_list.append(tmp_file_names)
     database = {"folders": folder_list, "features": feature_list, "mean_features": mean_feature_list,
-                "representative_features": representative_data_points, "names": name_list}
+                "representative_features": representative_data_points, "files": file_list}
 
     with open(DATABASE, 'w') as f:
         json.dump(database, f)

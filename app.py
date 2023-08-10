@@ -16,7 +16,7 @@ import face_recognition
 import matplotlib.pyplot as plt
 
 CROP_IMAGES = True
-MEAN_FEATURES = True
+FEATURE_TYPE = "mean"  # mean, all or representative
 N_SAMPLES = 10
 N_MATCHES = 3
 N_PCA = N_MATCHES
@@ -25,20 +25,24 @@ MODEL_NAME = "best_encoder_505000_step_acc_0_9013.h5"#"best_encoder_419000_step_
 SUPPORT_SET_PATH = "./Supportset_Celebrities_crop"
 DATABASE = "./database_celebrities_crop.json"
 
+
+encoder = tf.keras.models.load_model(os.path.join('vgg_models', MODEL_NAME), compile=False)
+
+
 def get_ranking(dist):
-    dist = round(dist, 4)
-    if dist<0.1:
-        return f"Sehr ähnlich mit Abstand: {dist}"
-    if dist<0.2:
-        return f"Ähnlich mit Abstand: {dist}"
-    if dist<0.3:
-        return f"Bisschen ähnlich mit Abstand: {dist}"
-    if dist<0.6:
-        return f"Wenig Ähnlichkeit mit Abstand: {dist}"
-    if dist<1:
-        return f"Sehr wenig Ähnlichkeit mit Abstand: {dist}"
+    if dist < 0.1:
+        return "Ähnlichkeit: Sehr hoch (Virt. Distanz: {:.2f})".format(dist)
+    if dist < 0.2:
+        return "Ähnlichkeit: Hoch (Virt. Distanz: {:.2f})".format(dist)
+    if dist < 0.3:
+        return "Ähnlichkeit: Mittel (Virt. Distanz: {:.2f})".format(dist)
+    if dist < 0.6:
+        return "Ähnlichkeit: Gering (Virt. Distanz: {:.2f})".format(dist)
+    if dist < 1:
+        return "Ähnlichkeit: Sehr gering (Virt. Distanz: {:.2f})".format(dist)
     else:
-        f"Keine Ähnlchkeit konnte im Datenset gefunden werden. Abstand: {dist}"
+        f"Keine ähnliche Person konnte im Datenset gefunden werden."
+
 
 def read_image(path):
     image = tf.keras.preprocessing.image.load_img(path,
@@ -49,23 +53,18 @@ def read_image(path):
     image = tf.keras.preprocessing.image.img_to_array(image, dtype='float32')
     return image
 
-encoder = tf.keras.models.load_model(os.path.join('vgg_models', MODEL_NAME), compile=False)
 
-def get_PCA(features, folders):
-
+def get_pca(features, folders):
     pca = PCA(n_components=2)
     z = pca.fit_transform(features)
-
-    #tsne = TSNE(n_components=2, perplexity=10,learning_rate='auto', init='pca', verbose=0, random_state=123)
-    #z = tsne.fit_transform(np.array(features))
 
     fig = plt.figure()
     fig.add_subplot(111)
 
     df = pd.DataFrame()
     df["y"] = folders
-    df["comp-1"] = z[:,0]
-    df["comp-2"] = z[:,1]
+    df["comp-1"] = z[:, 0]
+    df["comp-2"] = z[:, 1]
 
     sns.scatterplot(x="comp-1", y="comp-2", hue=df.y.tolist(),
                     palette=sns.color_palette("hls", len(list(set(folders)))),
@@ -82,14 +81,15 @@ def get_PCA(features, folders):
 
     return data
 
-def process_recorded_images(image_buffer, mean=MEAN_FEATURES):
 
+def process_recorded_images(image_buffer):
     with open(DATABASE, "r") as f:
         database = json.load(f)
-    folder_list = database["folders"]
-    mean_feature_list = database["mean_features"]
-    feature_list = database["features"]
-    name_list = database["names"]
+    dataset_folder_list = database["folders"]
+    mean_dataset_feature_list = database["mean_features"]
+    representative_dataset_feature_list = database["representative_features"]
+    dataset_feature_list = database["features"]
+    dataset_file_list = database["names"]
 
     ### Create features of webcam input
     if CROP_IMAGES:
@@ -97,128 +97,103 @@ def process_recorded_images(image_buffer, mean=MEAN_FEATURES):
         for image in image_buffer:
             image = np.array(image)
             face_locations = face_recognition.face_locations(image)
-            if len(face_locations)>0:
-                #crop = image[face_locations[0][0]:face_locations[0][2], face_locations[0][3]:face_locations[0][1]]
-                ###
+            if len(face_locations) > 0:
+                # Define crop region
                 y_start = face_locations[0][0]
                 y_end = face_locations[0][2]
                 x_start = face_locations[0][3]
                 x_end = face_locations[0][1]
+                add_length = int((x_end - x_start))//2
+                new_y_start = max(y_start - add_length, 0)
+                new_y_end = min(y_end + add_length, image.shape[0])
+                new_x_start = max(x_start - add_length, 0)
+                new_x_end = min(x_end + add_length, image.shape[1])
 
-                done = False
-                start = 0.5
-                decrease = 0.01
-                while not done:
-                    add_length = int((x_end - x_start)*start)//2
-                    new_y_start = y_start - add_length
-                    new_y_end = y_end + add_length
-                    new_x_start = x_start - add_length
-                    new_x_end = x_end + add_length
-                    if new_y_start>=0 and new_x_start>=0 and new_y_end<=image.shape[0] and new_x_end<=image.shape[1]:
-                        done = True
-                        break
-                    start -= decrease
-
-                crop = image[new_y_start:new_y_end, new_x_start:new_x_end]
-                ###
-                input_images.append(cv2.resize(crop, (300, 300), interpolation = cv2.INTER_AREA))
+                cropped_image = image[new_y_start:new_y_end, new_x_start:new_x_end]
+                input_images.append(cv2.resize(cropped_image, (300, 300), interpolation=cv2.INTER_LINEAR))
         input_images = np.array(input_images)
     else:
-        input_images = np.array([cv2.resize(image, (300, 300), interpolation = cv2.INTER_AREA) for image in image_buffer])
+        input_images = np.array([cv2.resize(image, (300, 300), interpolation=cv2.INTER_LINEAR) for image in image_buffer])
 
-    if len(input_images)<1:
+    if not len(input_images):
         return None, None, None, None, None
 
-    own_features = encoder(preprocess_input(input_images))
-    rep = np.mean(own_features, axis=0)
-    ###
+    target_features = encoder(preprocess_input(input_images))
+    mean_target_features = np.mean(target_features, axis=0)
 
-    if mean:
-        mean_distances = []
-        for features in mean_feature_list:
-            dist = tf.reduce_sum((rep - features)**2, axis=-1).numpy()
-            mean_distances.append(dist)
+    distances = []
+    if FEATURE_TYPE == "mean":
+        # Iterate through all persons in the support dataset
+        for dataset_person_features in mean_dataset_feature_list:
+            # Calculate the distance between each person's mean features and the target person's mean features
+            dist = tf.reduce_sum((mean_target_features - dataset_person_features)**2, axis=-1).numpy()
+            alt_dist = np.linalg.norm(mean_target_features - dataset_person_features, axis=1)
+            distances.append(dist)
 
-        idx = np.argsort(mean_distances)
-        mean_distances = [mean_distances[i] for i in idx]
-        folder_list = [folder_list[i] for i in idx]
-        feature_list = [feature_list[i] for i in idx]
-        name_list = [name_list[i] for i in idx]
+    elif FEATURE_TYPE == "representative":
+        # Iterate through all persons in the support dataset
+        for dataset_person_features in representative_dataset_feature_list:
+            # Calculate the distance between each person's mean features and the target person's mean features
+            dist = tf.reduce_sum((mean_target_features - dataset_person_features)**2, axis=-1).numpy()
+            alt_dist = np.linalg.norm(mean_target_features - dataset_person_features, axis=1)
+            distances.append(dist)
 
-        final_files = []
-        final_folders = []
-        final_distances = []
-        for j in range(N_MATCHES):
-            if j<len(feature_list):
-                distances = []
-                features = feature_list[j]
-                folder = folder_list[j]
-                names = name_list[j]
-                for feature in features:
-                    dist = tf.reduce_sum((rep - feature)**2, axis=-1).numpy()
-                    distances.append(dist)
-                idx = np.argsort(distances)
-                distances = [distances[i] for i in idx]
-                names = [names[i] for i in idx]
-                final_distances.append(distances[0])
-                final_folders.append(folder)
-                final_files.append(names[0])
+    elif FEATURE_TYPE == "all":
+        # Iterate through all persons in the support dataset
+        for idx, (dataset_person_folder, dataset_person_features, dataset_person_files) \
+                in enumerate(zip(dataset_folder_list, dataset_feature_list, dataset_file_list)):
 
-    else:
-        final_distances = []
-        final_files = []
-        final_folders = []
-        final_features = []
-        mean_distances = []
+            # ToDo: Store the respective image along with the smallest distance for each person.
+            person_distances = []
+            # person_files = []
+            # Iterate through all available images for each person
+            for person_feature, person_file in zip(dataset_person_features, dataset_person_files):
+                dist = tf.reduce_sum((mean_target_features - person_feature)**2, axis=-1).numpy()
+                person_distances.append(dist)
+                # person_files.append(person_file)
+            # Store the smallest distance along with the respective file path
+            distances.append(np.min(person_distances))
 
-        for i, folder in enumerate(folder_list):
-            features = feature_list[i]
-            names = name_list[i]
+    # Sort the dataset by distance to the target person
+    sorted_indices = np.argsort(distances)
+    sorted_distances = [distances[i] for i in sorted_indices]
+    sorted_dataset_folder_list = [dataset_folder_list[i] for i in sorted_indices]
+    sorted_dataset_feature_list = [dataset_feature_list[i] for i in sorted_indices]
+    sorted_dataset_file_list = [dataset_file_list[i] for i in sorted_indices]
 
-            current_distances = []
-            current_names = []
-            for feature, name in zip(features, names):
-                dist = tf.reduce_sum((rep - feature)**2, axis=-1).numpy()
-                current_distances.append(dist)
-                current_names.append(name)
+    final_file_list = []
+    final_distance_list = []
+    # Iterate through the closest person's images and extracted features and find the actual closest image to the
+    # target person.
+    for person_features, person_files in zip(sorted_dataset_feature_list[:N_MATCHES],
+                                             sorted_dataset_file_list[:N_MATCHES]):
+        person_distances = []
+        for feature in person_features:
+            dist = tf.reduce_sum((mean_target_features - feature)**2, axis=-1).numpy()
+            person_distances.append(dist)
+        smallest_distance_index = np.argsort(distances)[0]
 
-            idx = np.argsort(current_distances)
-            current_distances = [current_distances[j] for j in idx]
-            current_names = [current_names[j] for j in idx]
-            final_distances.append(current_distances[0])
-            mean_distances.append(np.mean(current_distances))
-            final_files.append(current_names[0])
-            final_folders.append(folder)
-            final_features.append(features)
-
-        idx = np.argsort(final_distances)
-        final_distances = [final_distances[j] for j in idx]
-        mean_distances = [mean_distances[j] for j in idx]
-        final_files = [final_files[j] for j in idx]
-        final_folders = [final_folders[j] for j in idx]
-        final_features = [final_features[j] for j in idx]
-
-        folder_list = [folder_list[j] for j in idx]
-        feature_list = [feature_list[j] for j in idx]
-
+        final_distance_list.append(distances[smallest_distance_index])
+        final_file_list.append(person_files[smallest_distance_index])
 
     pca_folders = [*["me"]*len(input_images)]
     features = []
-    for j in range(N_PCA):
-        if j < len(folder_list):
-            folder = folder_list[j]
-            pca_folders.extend([f"Close example: {folder}"]*len(feature_list[j]))
-            features.append(feature_list[j])
-    for _ in range(5):#N_PCA):
-        idx = np.random.randint(low=N_PCA, high=len(folder_list))
-        folder = folder_list[idx]
-        pca_folders.extend([f"Random example: {folder}"]*len(feature_list[idx]))
-        features.append(feature_list[idx])
+    for idx in range(N_PCA):
+        folder = sorted_dataset_folder_list[idx]
+        pca_folders.extend([f"Close example: {folder}"]*len(sorted_dataset_feature_list[idx]))
+        features.append(sorted_dataset_feature_list[idx])
+    for _ in range(5):
+        idx = np.random.randint(low=N_PCA, high=len(sorted_dataset_folder_list))
+        folder = sorted_dataset_folder_list[idx]
+        pca_folders.extend([f"Random example: {folder}"]*len(sorted_dataset_feature_list[idx]))
+        features.append(sorted_dataset_feature_list[idx])
     features = np.array(features)
     features = features.reshape(features.shape[0]*features.shape[1], features.shape[-1])
-    pca_features = [*own_features, *features]
+    pca_features = [*target_features, *features]
 
-    return final_files, final_folders, mean_distances, pca_features, pca_folders
+    return final_file_list, sorted_dataset_folder_list[:N_MATCHES], sorted_distances, \
+        pca_features, pca_folders
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -325,13 +300,13 @@ class MainWindow(QMainWindow):
         self.init_camera()
 
     def show_result(self):
-
-        files, folders, distances, feature_list, current_folders = process_recorded_images(self.image_buffer)
+        # files, folders, distances, feature_list, current_folders = process_recorded_images(self.image_buffer)
+        file_list, folder_list, distances, pca_features, pca_folders = process_recorded_images(self.image_buffer)
         self.stop_loading_spinner()
 
         layout = QVBoxLayout()
 
-        if files is None:
+        if file_list is None:
             label = QLabel("No face has been detected")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(label)
@@ -342,12 +317,13 @@ class MainWindow(QMainWindow):
             pixmap = QPixmap.fromImage(image)
             pixmaps = [pixmap]
             for i in range(N_MATCHES):
-                if i < len(files):
-                    pixmaps.append(QPixmap(os.path.join(SUPPORT_SET_PATH, folders[i], files[i])))
+                pixmaps.append(QPixmap(os.path.join(SUPPORT_SET_PATH,
+                                                    folder_list[i],
+                                                    file_list[i])))
 
             for i, pixmap in enumerate(pixmaps):
                 if i >= 1:
-                    label = QLabel(f"{folders[i-1]} {get_ranking(distances[i-1])}")
+                    label = QLabel(f"{folder_list[i-1]} {get_ranking(distances[i-1])}")
                     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     layout.addWidget(label)
 
@@ -356,7 +332,7 @@ class MainWindow(QMainWindow):
                 image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 layout.addWidget(image_label)
 
-            image = get_PCA([*feature_list], current_folders)
+            image = get_pca([*pca_features], pca_folders)
             image = QImage(image.data, image.shape[1], image.shape[0], QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(image)
             image_label = QLabel()
