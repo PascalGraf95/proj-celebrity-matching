@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QWidget, QScrollArea
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QImage, QPixmap, QMovie
+from PyQt6.QtGui import QImage, QPixmap, QMovie, QFont
 from tensorflow.keras.applications.inception_v3 import preprocess_input
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -14,6 +14,7 @@ import sys
 import json
 import face_recognition
 import matplotlib.pyplot as plt
+from load_write_dict import load_dict_from_file
 
 CROP_IMAGES = True
 FEATURE_TYPE = "mean"  # mean, all or representative
@@ -22,11 +23,13 @@ N_MATCHES = 3
 N_PCA = N_MATCHES
 WEBCAM_RESOLUTION = (1080, 720)
 MODEL_NAME = "best_encoder_505000_step_acc_0_9013.h5"#"best_encoder_419000_step_ap_0_2872_an_1_8216.h5"
-SUPPORT_SET_PATH = "./Supportset_Celebrities_crop"
+SUPPORT_SET_PATH = "./Supportset_Celebrities"
 DATABASE = "./database_celebrities_crop.json"
 
 
 encoder = tf.keras.models.load_model(os.path.join('vgg_models', MODEL_NAME), compile=False)
+
+celebrity_dictionary = load_dict_from_file('celebrity_dictionary.txt')
 
 
 def get_ranking(dist):
@@ -41,7 +44,7 @@ def get_ranking(dist):
     if dist < 1:
         return "Ähnlichkeit: Sehr gering (Virt. Distanz: {:.2f})".format(dist)
     else:
-        f"Keine ähnliche Person konnte im Datenset gefunden werden."
+        f"Im Datenset konnte keine ähnliche Person gefunden werden."
 
 
 def read_image(path):
@@ -77,6 +80,7 @@ def get_pca(features, folders):
     fig.canvas.draw()
     data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
     data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    plt.close(fig)
     ##
 
     return data
@@ -85,11 +89,17 @@ def get_pca(features, folders):
 def process_recorded_images(image_buffer):
     with open(DATABASE, "r") as f:
         database = json.load(f)
-    dataset_folder_list = database["folders"]
+    dataset_folder_list = database["folders"]  # A list with names of all persons in the support dataset.
+    # A list with 128 features per person in the support dataset. Those have been calculated by taking the mean over n
+    # images of each person.
     mean_dataset_feature_list = database["mean_features"]
+    # A list with 128 features per person in the support dataset. Those have been calculated by looking for the image
+    # that is most representative for each person.
     representative_dataset_feature_list = database["representative_features"]
+    # A nested list with 128 features for each image per person in the support dataset
     dataset_feature_list = database["features"]
-    dataset_file_list = database["names"]
+    # A nested list of file names for each person's images in the support dataset.
+    dataset_file_list = database["files"]
 
     ### Create features of webcam input
     if CROP_IMAGES:
@@ -127,15 +137,16 @@ def process_recorded_images(image_buffer):
         for dataset_person_features in mean_dataset_feature_list:
             # Calculate the distance between each person's mean features and the target person's mean features
             dist = tf.reduce_sum((mean_target_features - dataset_person_features)**2, axis=-1).numpy()
-            alt_dist = np.linalg.norm(mean_target_features - dataset_person_features, axis=1)
+            # dist = np.linalg.norm(mean_target_features - np.array(dataset_person_features), axis=-1)
             distances.append(dist)
+            # alt_distances.append(alt_dist)
 
     elif FEATURE_TYPE == "representative":
         # Iterate through all persons in the support dataset
         for dataset_person_features in representative_dataset_feature_list:
             # Calculate the distance between each person's mean features and the target person's mean features
             dist = tf.reduce_sum((mean_target_features - dataset_person_features)**2, axis=-1).numpy()
-            alt_dist = np.linalg.norm(mean_target_features - dataset_person_features, axis=1)
+            # dist = np.linalg.norm(mean_target_features - np.array(dataset_person_features), axis=-1)
             distances.append(dist)
 
     elif FEATURE_TYPE == "all":
@@ -156,6 +167,7 @@ def process_recorded_images(image_buffer):
 
     # Sort the dataset by distance to the target person
     sorted_indices = np.argsort(distances)
+    # sorted_alt_indices = np.argsort(alt_distances)
     sorted_distances = [distances[i] for i in sorted_indices]
     sorted_dataset_folder_list = [dataset_folder_list[i] for i in sorted_indices]
     sorted_dataset_feature_list = [dataset_feature_list[i] for i in sorted_indices]
@@ -170,10 +182,11 @@ def process_recorded_images(image_buffer):
         person_distances = []
         for feature in person_features:
             dist = tf.reduce_sum((mean_target_features - feature)**2, axis=-1).numpy()
+            # dist = np.linalg.norm(mean_target_features - np.array(feature), axis=-1)
             person_distances.append(dist)
-        smallest_distance_index = np.argsort(distances)[0]
+        smallest_distance_index = np.argsort(person_distances)[0]
 
-        final_distance_list.append(distances[smallest_distance_index])
+        final_distance_list.append(person_distances[smallest_distance_index])
         final_file_list.append(person_files[smallest_distance_index])
 
     pca_folders = [*["me"]*len(input_images)]
@@ -203,7 +216,9 @@ class MainWindow(QMainWindow):
 
         self.image_label = QLabel()
         self.record_button = QPushButton("Match")
+        self.record_button.setFont(QFont("Calibri", 24))
         self.reset_button = QPushButton('Reset')
+        self.reset_button.setFont(QFont("Calibri", 24))
 
         self.movie = QMovie("./loader.gif")
 
@@ -217,7 +232,7 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         layout = QVBoxLayout()
 
-        self.setStyleSheet('font-size: ' + str(22)+'px')
+        #self.setStyleSheet('font-size: ' + str(22)+'px')
 
         self.image_label = QLabel()
 
@@ -296,6 +311,7 @@ class MainWindow(QMainWindow):
         self.is_recording = False
         self.image_buffer = []
         self.record_button = QPushButton("Match")
+        self.record_button.setFont(QFont("Calibri", 24))
         self.init_ui()
         self.init_camera()
 
@@ -304,48 +320,79 @@ class MainWindow(QMainWindow):
         file_list, folder_list, distances, pca_features, pca_folders = process_recorded_images(self.image_buffer)
         self.stop_loading_spinner()
 
-        layout = QVBoxLayout()
+        vertical_global_layout = QVBoxLayout()
 
         if file_list is None:
             label = QLabel("No face has been detected")
+            label.setFont(QFont("Calibri", 24))
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(label)
+            vertical_global_layout.addWidget(label)
 
         else:
-            image = self.image_buffer[0]
-            image = QImage(image.data, image.shape[1], image.shape[0], QImage.Format.Format_RGB888)
-            pixmap = QPixmap.fromImage(image)
+            # Target Person's Image
+            target_image = self.image_buffer[0]
+            target_image = QImage(target_image.data, target_image.shape[1], target_image.shape[0],
+                                 QImage.Format.Format_RGB888)
+            pixmap = QPixmap.fromImage(target_image)
             pixmaps = [pixmap]
+
+            horizontal_local_layout = QHBoxLayout()
+
+            # Support Dataset Images
             for i in range(N_MATCHES):
                 pixmaps.append(QPixmap(os.path.join(SUPPORT_SET_PATH,
                                                     folder_list[i],
                                                     file_list[i])))
 
             for i, pixmap in enumerate(pixmaps):
-                if i >= 1:
-                    label = QLabel(f"{folder_list[i-1]} {get_ranking(distances[i-1])}")
-                    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    layout.addWidget(label)
+                vertical_local_layout = QVBoxLayout()
+                vertical_local_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
                 image_label = QLabel()
                 image_label.setPixmap(pixmap.scaled(image_label.size(), Qt.AspectRatioMode.KeepAspectRatio))
                 image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                layout.addWidget(image_label)
+                vertical_local_layout.addWidget(image_label)
 
+                if i >= 1:
+                    label_name = QLabel(f"{folder_list[i-1]}")
+                    label_name.setFont(QFont("Calibri", 24, weight=700))
+                    label_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+                    label_distance = QLabel(f"{get_ranking(distances[i-1])}")
+                    label_distance.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    label_distance.setFont(QFont("Calibri", 14))
+
+                    label_description = QLabel(celebrity_dictionary[folder_list[i-1]])
+                    label_description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    label_description.setFont(QFont("Calibri", 12, italic=True))
+
+                    vertical_local_layout.addWidget(label_name)
+                    vertical_local_layout.addWidget(label_distance)
+                    vertical_local_layout.addWidget(label_description)
+                    horizontal_local_layout.addLayout(vertical_local_layout)
+                else:
+                    label_name = QLabel("You")
+                    label_name.setFont(QFont("Calibri", 24, weight=700))
+                    label_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    vertical_local_layout.addWidget(label_name)
+                    vertical_global_layout.addLayout(vertical_local_layout)
+
+            vertical_global_layout.addLayout(horizontal_local_layout)
             image = get_pca([*pca_features], pca_folders)
             image = QImage(image.data, image.shape[1], image.shape[0], QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(image)
             image_label = QLabel()
             image_label.setPixmap(pixmap.scaled(image_label.size(), Qt.AspectRatioMode.KeepAspectRatio))
             image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(image_label)
+            vertical_global_layout.addWidget(image_label)
 
         self.reset_button = QPushButton('Reset')
+        self.reset_button.setFont(QFont("Calibri", 24))
         self.reset_button.clicked.connect(self.reset)
-        layout.addWidget(self.reset_button)
+        vertical_global_layout.addWidget(self.reset_button)
             
         container = QWidget()
-        container.setLayout(layout)
+        container.setLayout(vertical_global_layout)
 
         scroll = QScrollArea()
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)

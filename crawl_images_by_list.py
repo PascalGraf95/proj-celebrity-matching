@@ -3,10 +3,36 @@ import os
 
 # List of names for which you want to download images
 names = [
-    "Abby Warmbach",
-    "Abigail Breslin",
-    "Adam Peaty",
-    "Adel Tawil",
+    "Robert De Niro",
+    "Meryl Streep",
+    "Leonardo DiCaprio",
+    "Tom Hanks",
+    "Jennifer Lawrence",
+    "Denzel Washington",
+    "Cate Blanchett",
+    "Johnny Depp",
+    "Scarlett Johansson",
+    "Brad Pitt",
+    "Julia Roberts",
+    "Morgan Freeman",
+    "Charlize Theron",
+    "Harrison Ford",
+    "Nicole Kidman",
+    "Samuel L. Jackson",
+    "Emma Stone",
+    "Anthony Hopkins",
+    "Natalie Portman",
+    "Al Pacino",
+    "Angelina Jolie",
+    "Will Smith",
+    "Viola Davis",
+    "Daniel Day-Lewis",
+    "Sandra Bullock",
+    "Ryan Gosling",
+    "Gong Li",
+    "Hugh Jackman",
+    "Keanu Reeves",
+    "Marion Cotillard"
 ]
 
 # Number of images to download for each person
