@@ -225,6 +225,9 @@ class MainWindow(QMainWindow):
 
         self.image_buffer = []
 
+        # Initialize the camera capture
+        self.camera = cv2.VideoCapture(0)  # Use the default camera
+
         self.init_ui()
         self.init_camera()
 
@@ -255,7 +258,7 @@ class MainWindow(QMainWindow):
 
     def init_camera(self):
         # Initialize the camera capture
-        self.camera = cv2.VideoCapture(0)  # Use the default camera
+        # self.camera = cv2.VideoCapture(0)  # Use the default camera
 
         # Create a timer to continuously update the camera image
         self.timer = QTimer()
