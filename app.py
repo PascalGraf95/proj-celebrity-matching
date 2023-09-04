@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from load_write_dict import load_dict_from_file
 
 CROP_IMAGES = True
-FEATURE_TYPE = "mean"  # mean, all or representative
+FEATURE_TYPE = "all"  # mean, all or representative
 N_SAMPLES = 10
 N_MATCHES = 3
 N_PCA = N_MATCHES
@@ -153,7 +153,6 @@ def process_recorded_images(image_buffer):
         # Iterate through all persons in the support dataset
         for idx, (dataset_person_folder, dataset_person_features, dataset_person_files) \
                 in enumerate(zip(dataset_folder_list, dataset_feature_list, dataset_file_list)):
-
             # ToDo: Store the respective image along with the smallest distance for each person.
             person_distances = []
             # person_files = []
