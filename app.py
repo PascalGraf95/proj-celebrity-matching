@@ -1,5 +1,6 @@
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QWidget, QScrollArea
+from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QWidget, QScrollArea, QSizePolicy
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6 import QtCore
 from PyQt6.QtGui import QImage, QPixmap, QMovie, QFont
 from tensorflow.keras.applications.inception_v3 import preprocess_input
 from sklearn.decomposition import PCA
@@ -212,7 +213,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.showFullScreen()
-
+        self.header_label = QLabel()
         self.image_label = QLabel()
         self.record_button = QPushButton("Match")
         self.record_button.setFont(QFont("Calibri", 24))
@@ -226,20 +227,36 @@ class MainWindow(QMainWindow):
         self.image_buffer = []
 
         # Initialize the camera capture
-        self.camera = cv2.VideoCapture(0)  # Use the default camera
+        self.camera = cv2.VideoCapture(0, cv2.CAP_DSHOW) # this is the magic!
+        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
         self.init_ui()
         self.init_camera()
 
     def init_ui(self):
+        screen = app.primaryScreen()
+        print('Screen: %s' % screen.name())
+        size = screen.size()
         layout = QVBoxLayout()
+        print('Size: %d x %d' % (size.width(), size.height()))
+        rect = screen.availableGeometry()
+        print('Available: %d x %d' % (rect.width(), rect.height()))
 
-        #self.setStyleSheet('font-size: ' + str(22)+'px')
-
+        self.setStyleSheet('font-size: ' + str(22)+'px')
+        self.header_label = QLabel()
+        self.header_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
+        self.header_label.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.header_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        pixmap = QPixmap("./images/header.png").scaledToWidth(int(size.width()*0.99),
+                                                              mode=QtCore.Qt.TransformationMode.SmoothTransformation)
+        self.header_label.setPixmap(pixmap)
         self.image_label = QLabel()
-
+        self.image_label.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.header_label)
         layout.addWidget(self.image_label)
+
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.record_button)
         #button_layout.addWidget(self.reset_button)
@@ -252,7 +269,6 @@ class MainWindow(QMainWindow):
 
         #self.setFixedSize(QSize(*WINDOW_SIZE))
         self.setWindowTitle("Celebrity Matching")
-
         self.record_button.clicked.connect(self.start_recording)
         self.reset_button.clicked.connect(self.reset)
 
@@ -272,21 +288,25 @@ class MainWindow(QMainWindow):
             # Convert the frame to RGB format
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame_rgb = cv2.flip(frame_rgb, 1)
-            frame_rgb = np.array(frame_rgb[0:1080, int((WEBCAM_RESOLUTION[0]/2)-(WEBCAM_RESOLUTION[1]/2)):int((WEBCAM_RESOLUTION[0]/2)+(WEBCAM_RESOLUTION[1]/2))]) # TODO: Webcam Resolution
-
+            # resize_ratio = np.min([self.image_label.size().width() * 0.95 / frame_rgb.shape[1],
+            #                        self.image_label.size().height() * 0.95 / frame_rgb.shape[0]])
+            # frame_rgb = cv2.resize(frame_rgb, dsize=(int(frame_rgb.shape[1] * resize_ratio),
+            #                                          int(frame_rgb.shape[0] * resize_ratio)))
             # Create a QImage from the frame
-            image = QImage(frame_rgb.data, frame_rgb.shape[1], frame_rgb.shape[0], QImage.Format.Format_RGB888)
+            image = QImage(frame_rgb.data, frame_rgb.shape[1], frame_rgb.shape[0],
+                           QImage.Format.Format_RGB888).scaledToHeight(self.image_label.size().height(),
+                                                              mode=QtCore.Qt.TransformationMode.SmoothTransformation)
 
             # Display the image on the QLabel
             pixmap = QPixmap.fromImage(image)
-            self.image_label.setPixmap(pixmap.scaled(self.image_label.size(), Qt.AspectRatioMode.KeepAspectRatio))
+            self.image_label.setPixmap(pixmap)
 
             if self.is_recording:
                 # Add the image to the buffer
                 self.image_buffer.append(frame_rgb)
 
                 if len(self.image_buffer) >= N_SAMPLES:
-                    
+                    self.image_label.setDisabled(True)
                     self.record_button.setText('Done')
                     self.timer.stop()
                     self.image_label.setMovie(self.movie)
