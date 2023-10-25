@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from load_write_dict import load_dict_from_file
 
 CROP_IMAGES = True
-FEATURE_TYPE = "all"  # mean, all or representative
+FEATURE_TYPE = "mean"  # mean, all or representative
 N_SAMPLES = 10
 N_MATCHES = 3
 N_PCA = N_MATCHES
@@ -109,11 +109,12 @@ def process_recorded_images(image_buffer):
             image = np.array(image)
             face_locations = face_recognition.face_locations(image)
             if len(face_locations) > 0:
+                face_idx = np.argmax([abs(f[1]-f[3]) * abs(f[2]-f[0]) for f in face_locations])
                 # Define crop region
-                y_start = face_locations[0][0]
-                y_end = face_locations[0][2]
-                x_start = face_locations[0][3]
-                x_end = face_locations[0][1]
+                y_start = face_locations[face_idx][0]
+                y_end = face_locations[face_idx][2]
+                x_start = face_locations[face_idx][3]
+                x_end = face_locations[face_idx][1]
                 add_length = int((x_end - x_start))//2
                 new_y_start = max(y_start - add_length, 0)
                 new_y_end = min(y_end + add_length, image.shape[0])
@@ -306,7 +307,7 @@ class MainWindow(QMainWindow):
                 self.image_buffer.append(frame_rgb)
 
                 if len(self.image_buffer) >= N_SAMPLES:
-                    self.image_label.setDisabled(True)
+                    self.image_label.setDisabled(False)
                     self.record_button.setText('Done')
                     self.timer.stop()
                     self.image_label.setMovie(self.movie)
@@ -340,8 +341,9 @@ class MainWindow(QMainWindow):
     def show_result(self):
         # files, folders, distances, feature_list, current_folders = process_recorded_images(self.image_buffer)
         file_list, folder_list, distances, pca_features, pca_folders = process_recorded_images(self.image_buffer)
-        self.stop_loading_spinner()
+        # self.stop_loading_spinner()
 
+        vertical_real_global_layout = QVBoxLayout()
         vertical_global_layout = QVBoxLayout()
 
         if file_list is None:
@@ -411,16 +413,21 @@ class MainWindow(QMainWindow):
         self.reset_button = QPushButton('Reset')
         self.reset_button.setFont(QFont("Calibri", 24))
         self.reset_button.clicked.connect(self.reset)
-        vertical_global_layout.addWidget(self.reset_button)
-            
-        container = QWidget()
-        container.setLayout(vertical_global_layout)
+
+        # container = QWidget()
+        # container.setLayout(vertical_global_layout)
 
         scroll = QScrollArea()
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         scroll.setWidgetResizable(True)
-        scroll.setWidget(container)
-        self.setCentralWidget(scroll)
+        scroll.setLayout(vertical_global_layout)
+        # scroll.setWidget(container)
+
+        vertical_real_global_layout.addWidget(scroll)
+        vertical_real_global_layout.addWidget(self.reset_button)
+        container = QWidget()
+        container.setLayout(vertical_real_global_layout)
+        self.setCentralWidget(container)
             
 
 
