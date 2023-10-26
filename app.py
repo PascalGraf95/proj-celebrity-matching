@@ -205,7 +205,7 @@ def process_recorded_images(image_buffer):
     features = features.reshape(features.shape[0]*features.shape[1], features.shape[-1])
     pca_features = [*target_features, *features]
 
-    return final_file_list, sorted_dataset_folder_list[:N_MATCHES], sorted_distances, \
+    return input_images, final_file_list, sorted_dataset_folder_list[:N_MATCHES], sorted_distances, \
         pca_features, pca_folders
 
 
@@ -229,8 +229,8 @@ class MainWindow(QMainWindow):
 
         # Initialize the camera capture
         self.camera = cv2.VideoCapture(0, cv2.CAP_DSHOW) # this is the magic!
-        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        #self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        #self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
         self.init_ui()
         self.init_camera()
@@ -307,7 +307,7 @@ class MainWindow(QMainWindow):
                 self.image_buffer.append(frame_rgb)
 
                 if len(self.image_buffer) >= N_SAMPLES:
-                    self.image_label.setDisabled(False)
+                    # self.image_label.setDisabled(False)
                     self.record_button.setText('Done')
                     self.timer.stop()
                     self.image_label.setMovie(self.movie)
@@ -340,7 +340,7 @@ class MainWindow(QMainWindow):
 
     def show_result(self):
         # files, folders, distances, feature_list, current_folders = process_recorded_images(self.image_buffer)
-        file_list, folder_list, distances, pca_features, pca_folders = process_recorded_images(self.image_buffer)
+        input_images, file_list, folder_list, distances, pca_features, pca_folders = process_recorded_images(self.image_buffer)
         # self.stop_loading_spinner()
 
         vertical_real_global_layout = QVBoxLayout()
@@ -354,7 +354,7 @@ class MainWindow(QMainWindow):
 
         else:
             # Target Person's Image
-            target_image = self.image_buffer[0]
+            target_image = input_images[0]# self.image_buffer[0]
             target_image = QImage(target_image.data, target_image.shape[1], target_image.shape[0],
                                  QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(target_image)
@@ -373,7 +373,8 @@ class MainWindow(QMainWindow):
                 vertical_local_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
                 image_label = QLabel()
-                image_label.setPixmap(pixmap.scaled(image_label.size(), Qt.AspectRatioMode.KeepAspectRatio))
+                image_label.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.MinimumExpanding)
+                image_label.setPixmap(pixmap.scaled(image_label.size()*0.9, Qt.AspectRatioMode.KeepAspectRatio))
                 image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 vertical_local_layout.addWidget(image_label)
 
@@ -414,15 +415,27 @@ class MainWindow(QMainWindow):
         self.reset_button.setFont(QFont("Calibri", 24))
         self.reset_button.clicked.connect(self.reset)
 
-        # container = QWidget()
-        # container.setLayout(vertical_global_layout)
+        container = QWidget()
+        container.setLayout(vertical_global_layout)
 
         scroll = QScrollArea()
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         scroll.setWidgetResizable(True)
-        scroll.setLayout(vertical_global_layout)
-        # scroll.setWidget(container)
+        # scroll.setLayout(vertical_global_layout)
+        scroll.setDisabled(False)
+        scroll.setWidget(container)
 
+        header_label = QLabel()
+        header_label.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
+        header_label.setAlignment(Qt.AlignmentFlag.AlignTop)
+        header_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        screen = app.primaryScreen()
+        size = screen.size()
+        pixmap = QPixmap("./images/header.png").scaledToWidth(int(size.width() * 0.99),
+                                                              mode=QtCore.Qt.TransformationMode.SmoothTransformation)
+        header_label.setPixmap(pixmap)
+
+        vertical_real_global_layout.addWidget(header_label)
         vertical_real_global_layout.addWidget(scroll)
         vertical_real_global_layout.addWidget(self.reset_button)
         container = QWidget()
