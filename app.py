@@ -389,7 +389,7 @@ class MainWindow(QMainWindow):
 
                     label_description = QLabel(celebrity_dictionary[folder_list[i-1]])
                     label_description.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    label_description.setFont(QFont("Calibri", 12, italic=True))
+                    label_description.setFont(QFont("Calibri", 7, italic=True))
 
                     vertical_local_layout.addWidget(label_name)
                     vertical_local_layout.addWidget(label_distance)
